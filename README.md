@@ -230,34 +230,36 @@ Secrets live only in git-ignored files, Convex environment variables and the n8n
 ## Architecture
 
 ```mermaid
-flowchart LR
-  subgraph Browser
-    UI[Next.js app<br/>Clerk session]
-  end
-  subgraph Convex
-    F[queries & mutations<br/>authorization in every function]
-    DB[(users · tools · loans<br/>outbox · reminders)]
-    A[deliver action<br/>retries + backoff]
-    H[HTTP actions<br/>/automation/*]
-  end
-  subgraph n8n
-    W1[01 Loan event notifications]
-    W2[02 Overdue reminders<br/>daily 08:00]
-    W3[03 Error handler]
-  end
-  M[(SMTP / Mailpit)]
+flowchart TB
+  UI["Next.js app<br/>signed in with Clerk"]
 
-  UI -- Clerk JWT --> F
-  F -- loan change + outbox row,<br/>one transaction --> DB
-  DB -. scheduled .-> A
-  A -- signed POST --> W1
-  W1 --> M
-  W1 -- signed write-back --> H
-  W2 -- signed GET --> H
-  W2 --> M
-  W2 -- signed write-back --> H
-  H --> DB
-  W1 & W2 -. on failure .-> W3 --> M
+  subgraph convex ["Convex"]
+    F["Queries and mutations<br/>access checks in every function"]
+    DB[("Database<br/>users · tools · loans<br/>outbox · reminders")]
+    A["deliver action<br/>retries with backoff"]
+    H["HTTP endpoints<br/>/automation/*"]
+    F -->|"loan change + outbox row<br/>in one transaction"| DB
+    DB -.->|"scheduled"| A
+    DB <-->|"overdue list,<br/>email results"| H
+  end
+
+  subgraph n8n ["n8n"]
+    W1["01 Loan event<br/>notifications"]
+    W2["02 Overdue reminders<br/>daily at 08:00"]
+    W3["03 Error handler"]
+    W1 -.->|"on failure"| W3
+    W2 -.->|"on failure"| W3
+  end
+
+  M[("SMTP<br/>Mailpit locally")]
+
+  UI -->|"Clerk JWT"| F
+  A -->|"signed loan event"| W1
+  H <-->|"signed GET<br/>and write-backs"| W2
+  H <-->|"signed write-back"| W1
+  W2 -->|"reminder email"| M
+  W1 -->|"notification email"| M
+  W3 -->|"ops alert"| M
 ```
 
 **Technology decisions**
