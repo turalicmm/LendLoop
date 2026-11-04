@@ -1,0 +1,59 @@
+# Local automation stack: n8n + Mailpit (an SMTP sink with a web inbox).
+#   cp .env.n8n.example .env.n8n   # fill in the secrets
+#   docker compose up -d
+#   ./n8n/setup.sh                 # import workflows + SMTP credential, activate
+# n8n:     http://localhost:5678
+# Mailpit: http://localhost:8025
+services:
+  n8n:
+    image: n8nio/n8n:2.46.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    env_file: .env.n8n
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: Europe/Sarajevo
+      TZ: Europe/Sarajevo
+      # Workflows read the shared secrets from the environment ($env), so they
+      # never appear in node parameters or in the exported JSON. Trade-off:
+      # anyone who can edit workflows can read this container's env. See
+      # "What I would change for production" in the README.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      # The workflows keep only failed and manual runs (they hold names and
+      # emails); those are deleted after 7 days.
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/lendloop/workflows:ro
+      - ./n8n/setup:/lendloop/setup:ro
+    depends_on:
+      - mailpit
+    # Ready only after the database migrations have finished. n8n/setup.sh
+    # waits for this before importing.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz/readiness >/dev/null 2>&1 || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 100
+      start_period: 5s
+
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+
+volumes:
+  n8n_data:

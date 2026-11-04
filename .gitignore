@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+!.env.example
+!.env.n8n.example
+
+# local secrets and tooling
+.secrets.local
+.claude/settings.local.json
+.clerk/
+.convex/

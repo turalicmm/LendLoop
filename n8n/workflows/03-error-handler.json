@@ -1,0 +1,93 @@
+{
+  "id": "lendloopErrors01",
+  "name": "LendLoop - Error handler",
+  "nodes": [
+    {
+      "id": "c3f3e1d2-0003-4e60-9c03-000000000001",
+      "name": "When a LendLoop workflow fails",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c3f3e1d2-0003-4e60-9c03-000000000002",
+      "name": "Describe failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Builds an alert from n8n's error payload. Only workflow and node names,\n// the error message and the execution link: no loan or user data.\nconst { execution = {}, workflow = {} } = $json;\nconst error = execution.error || {};\nconst lines = [\n  `Workflow: ${workflow.name || workflow.id || 'unknown'}`,\n  `Failed node: ${execution.lastNodeExecuted || 'unknown'}`,\n  `Error: ${error.message || 'no message'}`,\n  `Mode: ${execution.mode || 'unknown'}`,\n  execution.url ? `Execution: ${execution.url}` : `Execution id: ${execution.id || 'unknown'}`,\n];\nconsole.error(`[lendloop] workflow failure\\n${lines.join('\\n')}`);\nreturn {\n  json: {\n    subject: `[LendLoop] ${workflow.name || 'Workflow'} failed`,\n    text: lines.join('\\n'),\n  },\n};"
+      }
+    },
+    {
+      "id": "c3f3e1d2-0003-4e60-9c03-000000000003",
+      "name": "Alert ops by email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        440,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000,
+      "credentials": {
+        "smtp": {
+          "id": "lendloopSmtp0001",
+          "name": "LendLoop SMTP"
+        }
+      },
+      "parameters": {
+        "fromEmail": "={{ $env.LENDLOOP_MAIL_FROM }}",
+        "toEmail": "={{ $env.LENDLOOP_OPS_EMAIL }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When a LendLoop workflow fails": {
+      "main": [
+        [
+          {
+            "node": "Describe failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Describe failure": {
+      "main": [
+        [
+          {
+            "node": "Alert ops by email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}
